@@ -153,6 +153,7 @@ static const GstRTPPayloadInfo info[] = {
   {G_MAXUINT8, "audio", "ILBC", 8000, NULL, 0},
   {G_MAXUINT8, "audio", "MPEG4-GENERIC", 0, NULL, 0},
   {G_MAXUINT8, "audio", "SPEEX", 0, NULL, 0},
+  {G_MAXUINT8, "audio", "AppleLossless", 44100, NULL, 0},
 
   {G_MAXUINT8, "application", "MPEG4-GENERIC", 0, NULL, 0},
 
