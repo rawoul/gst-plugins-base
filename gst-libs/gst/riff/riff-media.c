@@ -1504,13 +1504,13 @@ gst_riff_create_audio_caps (guint16 codec_id,
       channels_max = 6;
       caps = gst_caps_new_empty_simple ("audio/x-ac3");
       if (codec_name)
-        *codec_name = g_strdup ("AC-3 audio");
+        *codec_name = g_strdup ("Dolby Digital");
       break;
     case GST_RIFF_WAVE_FORMAT_DTS:
       channels_max = 6;
       caps = gst_caps_new_empty_simple ("audio/x-dts");
       if (codec_name)
-        *codec_name = g_strdup ("DTS audio");
+        *codec_name = g_strdup ("DTS");
       /* wavparse is not always able to specify rate/channels for DTS-in-wav */
       rate_chan = FALSE;
       break;

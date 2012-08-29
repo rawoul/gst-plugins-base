@@ -111,10 +111,10 @@ static const FormatInfo formats[] = {
   {"video/mj2", "Motion JPEG 2000", AVIS_CONTAINER, "mj2"},
 
   /* audio formats with static descriptions */
-  {"audio/x-ac3", "AC-3 (ATSC A/52)", FLAG_AUDIO, "ac3"},
-  {"audio/ac3", "AC-3 (ATSC A/52)", FLAG_AUDIO, "ac3"},
-  {"audio/x-private-ac3", "DVD AC-3 (ATSC A/52)", FLAG_AUDIO, "ac3"},
-  {"audio/x-private1-ac3", "DVD AC-3 (ATSC A/52)", FLAG_AUDIO, "ac3"},
+  {"audio/x-ac3", "Dolby Digital", FLAG_AUDIO, "ac3"},
+  {"audio/ac3", "Dolby Digital", FLAG_AUDIO, "ac3"},
+  {"audio/x-private-ac3", "Dolby Digital", FLAG_AUDIO, "ac3"},
+  {"audio/x-private1-ac3", "Dolby Digital", FLAG_AUDIO, "ac3"},
   {"audio/x-alaw", "A-Law", FLAG_AUDIO, ""},
   {"audio/amr", "Adaptive Multi Rate (AMR)", FLAG_AUDIO, "amr"},
   {"audio/AMR", "Adaptive Multi Rate (AMR)", FLAG_AUDIO, "amr"},
@@ -142,7 +142,7 @@ static const FormatInfo formats[] = {
   {"audio/x-dts", "DTS", FLAG_AUDIO, "dts"},
   {"audio/x-private1-dts", "DTS", FLAG_AUDIO, "dts"},
   {"audio/x-dv", "DV Audio", FLAG_AUDIO, ""},
-  {"audio/x-eac3", "E-AC-3 (ATSC A/52B)", FLAG_AUDIO, "eac3"},
+  {"audio/x-eac3", "Dolby Digital Plus", FLAG_AUDIO, "eac3"},
   {"audio/x-flac", N_("Free Lossless Audio Codec (FLAC)"), FLAG_AUDIO, "flac"},
   {"audio/x-gsm", "GSM", FLAG_AUDIO, "gsm"},
   {"audio/x-iec958", "S/PDIF IEC958", 0, ""},   /* TODO: check description */
