@@ -89,7 +89,7 @@ GST_STATIC_PAD_TEMPLATE ("src",
     GST_STATIC_CAPS ("audio/x-raw, "
         "format = (string) " FORMAT_STR ", "
         "layout = (string) interleaved, "
-        "rate = (int) [ 1, MAX ], " "channels = (int) [ 1, 2]")
+        "rate = (int) [ 1, MAX ], " "channels = (int) [ 1, 8]")
     );
 
 #define gst_audio_test_src_parent_class parent_class
