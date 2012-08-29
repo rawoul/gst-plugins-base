@@ -35,6 +35,9 @@
  * </refsect2>
  */
 
+#include <stdlib.h>
+#include <string.h>
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -64,8 +67,14 @@ enum
   PROP_CURRENT_PORT
 };
 
+static void gst_tcp_server_src_uri_handler_init (gpointer g_iface,
+    gpointer iface_data);
+
+#define _do_init \
+  G_IMPLEMENT_INTERFACE (GST_TYPE_URI_HANDLER, gst_tcp_server_src_uri_handler_init);
 #define gst_tcp_server_src_parent_class parent_class
-G_DEFINE_TYPE (GstTCPServerSrc, gst_tcp_server_src, GST_TYPE_PUSH_SRC);
+G_DEFINE_TYPE_WITH_CODE (GstTCPServerSrc, gst_tcp_server_src, GST_TYPE_PUSH_SRC,
+    _do_init);
 
 static void gst_tcp_server_src_finalize (GObject * gobject);
 
@@ -563,4 +572,75 @@ gst_tcp_server_src_unlock_stop (GstBaseSrc * bsrc)
   src->cancellable = g_cancellable_new ();
 
   return TRUE;
+}
+
+/*** GSTURIHANDLER INTERFACE *************************************************/
+
+static GstURIType
+gst_tcp_server_src_uri_get_type (GType type)
+{
+  return GST_URI_SRC;
+}
+
+static const gchar *const *
+gst_tcp_server_src_uri_get_protocols (GType type)
+{
+  static const gchar *protocols[] = { "tcp", NULL };
+
+  return protocols;
+}
+
+static gboolean
+gst_tcp_server_src_uri_set_uri (GstURIHandler * handler, const gchar * uri,
+    GError ** error)
+{
+  gchar *protocol;
+  GstTCPServerSrc *src = GST_TCP_SERVER_SRC (handler);
+  gchar *p;
+  gchar *host;
+
+  GST_INFO_OBJECT (src, "checking uri %s", uri);
+
+  protocol = gst_uri_get_protocol (uri);
+  if (strcmp (protocol, "tcp") != 0) {
+    g_free (protocol);
+    return FALSE;
+  }
+  g_free (protocol);
+
+  host = gst_uri_get_location (uri);
+  p = strchr (host, '/');
+  if (p != NULL)
+    *p = '\0';
+
+  p = strchr (host, ':');
+  if (p != NULL) {
+    gint port;
+
+    *p++ = '\0';
+    port = atoi (p);
+
+    if (port >= 0)
+      src->server_port = port;
+  }
+
+  if (!*host || !strcmp (host, "@")) {
+    g_free (host);
+    host = NULL;
+  }
+
+  g_free (src->host);
+  src->host = host;
+
+  return TRUE;
+}
+
+static void
+gst_tcp_server_src_uri_handler_init (gpointer g_iface, gpointer iface_data)
+{
+  GstURIHandlerInterface *iface = (GstURIHandlerInterface *) g_iface;
+
+  iface->get_type = gst_tcp_server_src_uri_get_type;
+  iface->get_protocols = gst_tcp_server_src_uri_get_protocols;
+  iface->set_uri = gst_tcp_server_src_uri_set_uri;
 }
