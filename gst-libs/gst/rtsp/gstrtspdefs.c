@@ -170,6 +170,14 @@ static struct rtsp_header rtsp_headers[] = {
   /* Since 1.4 */
   {"KeyMgmt", FALSE},
 
+  /* Freebox extensions */
+  {"X-Freebox-PVR", FALSE},
+  {"X-Freebox-Capabilities", FALSE},
+  {"X-Freebox-Preferred-Capabilities", FALSE},
+  {"X-Freebox-Model", FALSE},
+  {"X-Freebox-Error", FALSE},
+  {"X-Freebox-Missing-Bandwidth", FALSE},
+
   {NULL, FALSE}
 };
 
