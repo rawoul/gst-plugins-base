@@ -701,14 +701,7 @@ subrip_unescape_formatting (gchar * txt)
 static gboolean
 subrip_remove_unhandled_tag (gchar * start, gchar * stop)
 {
-  gchar *tag, saved;
-
-  tag = start + strlen ("&lt;");
-  if (*tag == '/')
-    ++tag;
-
-  if (g_ascii_tolower (*tag) < 'a' || g_ascii_tolower (*tag) > 'z')
-    return FALSE;
+  gchar saved;
 
   saved = *stop;
   *stop = '\0';
@@ -723,11 +716,19 @@ subrip_remove_unhandled_tag (gchar * start, gchar * stop)
 static void
 subrip_remove_unhandled_tags (gchar * txt)
 {
-  gchar *pos, *gt;
+  gchar *pos, *gt, *tag;
 
   for (pos = txt; pos != NULL && *pos != '\0'; ++pos) {
     if (strncmp (pos, "&lt;", 4) == 0 && (gt = strstr (pos + 4, "&gt;"))) {
-      if (subrip_remove_unhandled_tag (pos, gt + strlen ("&gt;")))
+      tag = pos + 4;
+      if (*tag == '/')
+        ++tag;
+      if (g_ascii_tolower (*tag) >= 'a' && g_ascii_tolower (*tag) <= 'z') {
+        subrip_remove_unhandled_tag (pos, gt + strlen ("&gt;"));
+        --pos;
+      }
+    } else if (strncmp (pos, "{\\", 2) == 0 && (gt = strchr (pos + 2, '}'))) {
+      if (subrip_remove_unhandled_tag (pos, gt + 1))
         --pos;
     }
   }
