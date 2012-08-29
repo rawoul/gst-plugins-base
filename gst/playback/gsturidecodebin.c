@@ -1277,6 +1277,7 @@ array_has_uri_value (const gchar * values[], const gchar * value)
 static const gchar *stream_uris[] = { "http://", "https://", "mms://",
   "mmsh://", "mmsu://", "mmst://", "fd://", "myth://", "ssh://",
   "ftp://", "sftp://",
+  "file://",
   NULL
 };
 
