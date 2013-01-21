@@ -5803,6 +5803,12 @@ plugin_init (GstPlugin * plugin)
   TYPE_FIND_REGISTER_START_WITH (plugin, "application/octet-stream",
       GST_RANK_SECONDARY, "DS_Store", "\000\000\000\001Bud1", 8,
       GST_TYPE_FIND_LIKELY);
+  /* TrueType fonts files tend to be taken for video/mpeg */
+  TYPE_FIND_REGISTER_START_WITH (plugin, "application/x-font-ttf",
+      GST_RANK_SECONDARY, "ttf", "\x00\x01\x00\x00\x00", 5,
+      GST_TYPE_FIND_LIKELY);
+  TYPE_FIND_REGISTER_START_WITH (plugin, "application/x-font-otf",
+      GST_RANK_SECONDARY, "otf", "OTTO", 4, GST_TYPE_FIND_LIKELY);
   TYPE_FIND_REGISTER_START_WITH (plugin, "image/vnd.adobe.photoshop",
       GST_RANK_SECONDARY, "psd", "8BPS\000\001\000\000\000\000", 10,
       GST_TYPE_FIND_LIKELY);
