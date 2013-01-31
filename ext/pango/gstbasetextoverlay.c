@@ -2083,8 +2083,10 @@ gst_base_text_overlay_push_frame (GstBaseTextOverlay * overlay,
   }
 
   if (!gst_video_frame_map (&frame, &overlay->info, video_frame,
-          GST_MAP_READWRITE))
-    goto invalid_frame;
+          GST_MAP_READWRITE)) {
+    GST_WARNING_OBJECT (overlay, "Failed to map video frame for blending");
+    goto done;
+  }
 
   /* shaded background box */
   if (overlay->want_shading) {
@@ -2097,20 +2099,10 @@ gst_base_text_overlay_push_frame (GstBaseTextOverlay * overlay,
   }
 
   gst_video_overlay_composition_blend (overlay->composition, &frame);
-
   gst_video_frame_unmap (&frame);
 
 done:
-
   return gst_pad_push (overlay->srcpad, video_frame);
-
-  /* ERRORS */
-invalid_frame:
-  {
-    gst_buffer_unref (video_frame);
-    GST_DEBUG_OBJECT (overlay, "received invalid buffer");
-    return GST_FLOW_OK;
-  }
 }
 
 static GstPadLinkReturn
