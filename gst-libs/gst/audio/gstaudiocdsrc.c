@@ -1765,6 +1765,9 @@ gst_audio_cd_src_create (GstPushSrc * pushsrc, GstBuffer ** buffer)
   GstAudioCdSrc *src = GST_AUDIO_CD_SRC (pushsrc);
   GstBuffer *buf;
   gboolean eos;
+  gsize needed_size;
+  gsize read_size;
+  guint read_sectors;
 
   GstClockTime position = GST_CLOCK_TIME_NONE;
   GstClockTime duration = GST_CLOCK_TIME_NONE;
@@ -1803,7 +1806,30 @@ gst_audio_cd_src_create (GstPushSrc * pushsrc, GstBuffer ** buffer)
 
   GST_LOG_OBJECT (src, "asking for sector %u", src->priv->cur_sector);
 
-  buf = klass->read_sector (src, src->priv->cur_sector);
+  needed_size = 1;
+
+  if (src->priv->prev_track != src->priv->cur_track)
+    needed_size = src->priv->cur_track == 0 ? 8 * 2048 : 2 * 2048;
+
+  read_sectors = 0;
+  read_size = 0;
+  buf = NULL;
+
+  while (read_size < needed_size) {
+    GstBuffer *sector_buf;
+
+    sector_buf = klass->read_sector (src, src->priv->cur_sector + read_sectors);
+    if (sector_buf == NULL)
+      break;
+
+    read_size += gst_buffer_get_size (sector_buf);
+    read_sectors++;
+
+    if (buf != NULL)
+      buf = gst_buffer_append (buf, sector_buf);
+    else
+      buf = sector_buf;
+  }
 
   if (buf == NULL) {
     GST_WARNING_OBJECT (src, "failed to read sector %u", src->priv->cur_sector);
@@ -1852,12 +1878,12 @@ gst_audio_cd_src_create (GstPushSrc * pushsrc, GstBuffer ** buffer)
 
     position = (GstClockTime) qry_position;
 
-    ++src->priv->cur_sector;
+    src->priv->cur_sector += read_sectors;
     if (gst_pad_query_position (GST_BASE_SRC_PAD (src), GST_FORMAT_TIME,
             &next_ts)) {
       duration = (GstClockTime) (next_ts - qry_position);
     }
-    --src->priv->cur_sector;
+    src->priv->cur_sector -= read_sectors;
   }
 
   /* fallback duration: 4 bytes per sample, 44100 samples per second */
@@ -1872,7 +1898,7 @@ gst_audio_cd_src_create (GstPushSrc * pushsrc, GstBuffer ** buffer)
   GST_LOG_OBJECT (src, "pushing sector %d with timestamp %" GST_TIME_FORMAT,
       src->priv->cur_sector, GST_TIME_ARGS (position));
 
-  ++src->priv->cur_sector;
+  src->priv->cur_sector += read_sectors;
 
   *buffer = buf;
 
