@@ -104,6 +104,7 @@
 
 #include <gst/tag/tag.h>
 #include <gst/audio/audio.h>
+#include <gst/base/gsttypefindhelper.h>
 #include "gstaudiocdsrc.h"
 #include "gst/gst-i18n-plugin.h"
 
@@ -173,6 +174,8 @@ static void gst_audio_cd_src_finalize (GObject * obj);
 static gboolean gst_audio_cd_src_query (GstBaseSrc * src, GstQuery * query);
 static gboolean gst_audio_cd_src_handle_event (GstBaseSrc * basesrc,
     GstEvent * event);
+static GstCaps *gst_audio_cd_src_get_caps (GstBaseSrc * basesrc,
+    GstCaps * filter);
 static gboolean gst_audio_cd_src_do_seek (GstBaseSrc * basesrc,
     GstSegment * segment);
 static gboolean gst_audio_cd_src_start (GstBaseSrc * basesrc);
@@ -191,12 +194,21 @@ G_DEFINE_TYPE_WITH_CODE (GstAudioCdSrc, gst_audio_cd_src, GST_TYPE_PUSH_SRC,
     G_IMPLEMENT_INTERFACE (GST_TYPE_URI_HANDLER,
         gst_audio_cd_src_uri_handler_init));
 
-#define SRC_CAPS \
-  "audio/x-raw, "               \
+#define RAW_CAPS                              \
+  "audio/x-raw, "                             \
   "format = (string) " GST_AUDIO_NE(S16) ", " \
-  "layout = (string) interleaved, " \
-  "rate = (int) 44100, "            \
-  "channels = (int) 2"              \
+  "layout = (string) interleaved, "           \
+  "rate = (int) 44100, "                      \
+  "channels = (int) 2"
+
+#define DTS_CAPS             \
+  "audio/x-dts, "            \
+  "rate = (int) 44100, "     \
+  "channels = (int) 6, "     \
+  "framed = (boolean) false"
+
+#define SRC_CAPS \
+  RAW_CAPS ";" DTS_CAPS
 
 static GstStaticPadTemplate gst_audio_cd_src_src_template =
 GST_STATIC_PAD_TEMPLATE ("src",
@@ -303,6 +315,7 @@ gst_audio_cd_src_class_init (GstAudioCdSrcClass * klass)
   basesrc_class->stop = GST_DEBUG_FUNCPTR (gst_audio_cd_src_stop);
   basesrc_class->query = GST_DEBUG_FUNCPTR (gst_audio_cd_src_query);
   basesrc_class->event = GST_DEBUG_FUNCPTR (gst_audio_cd_src_handle_event);
+  basesrc_class->get_caps = GST_DEBUG_FUNCPTR (gst_audio_cd_src_get_caps);
   basesrc_class->do_seek = GST_DEBUG_FUNCPTR (gst_audio_cd_src_do_seek);
   basesrc_class->is_seekable = GST_DEBUG_FUNCPTR (gst_audio_cd_src_is_seekable);
 
@@ -976,6 +989,24 @@ gst_audio_cd_src_handle_event (GstBaseSrc * basesrc, GstEvent * event)
   }
 
   return ret;
+}
+
+static GstCaps *
+gst_audio_cd_src_get_caps (GstBaseSrc * basesrc, GstCaps * filter)
+{
+  GstCaps *caps;
+
+  caps = gst_pad_get_current_caps (GST_BASE_SRC_PAD (basesrc));
+  if (caps && filter) {
+    GstCaps *intersection;
+
+    intersection =
+        gst_caps_intersect_full (filter, caps, GST_CAPS_INTERSECT_FIRST);
+    gst_caps_unref (caps);
+    caps = intersection;
+  }
+
+  return caps;
 }
 
 static GstURIType
@@ -1706,6 +1737,26 @@ gst_audio_cd_src_stop (GstBaseSrc * basesrc)
   return TRUE;
 }
 
+static gboolean
+caps_are_dts (const GstCaps * caps, GstTypeFindProbability prob)
+{
+  GstStructure *s;
+
+  s = gst_caps_get_structure (caps, 0);
+  if (!gst_structure_has_name (s, "audio/x-dts"))
+    return FALSE;
+  if (prob >= GST_TYPE_FIND_LIKELY)
+    return TRUE;
+  /* DTS at non-0 offsets and without second sync may yield POSSIBLE .. */
+  if (prob < GST_TYPE_FIND_POSSIBLE)
+    return FALSE;
+  /* .. in which case we want at least a valid-looking rate and channels */
+  if (!gst_structure_has_field (s, "channels"))
+    return FALSE;
+  /* and for extra assurance we could also check the rate from the DTS frame
+   * against the one in the wav header, but for now let's not do that */
+  return gst_structure_has_field (s, "rate");
+}
 
 static GstFlowReturn
 gst_audio_cd_src_create (GstPushSrc * pushsrc, GstBuffer ** buffer)
@@ -1750,21 +1801,6 @@ gst_audio_cd_src_create (GstPushSrc * pushsrc, GstBuffer ** buffer)
     src->priv->toc_event = NULL;
   }
 
-  if (src->priv->prev_track != src->priv->cur_track) {
-    GstTagList *tags;
-
-    tags =
-        gst_tag_list_merge (src->tags,
-        src->priv->tracks[src->priv->cur_track].tags, GST_TAG_MERGE_REPLACE);
-    GST_LOG_OBJECT (src, "announcing tags: %" GST_PTR_FORMAT, tags);
-    gst_pad_push_event (GST_BASE_SRC_PAD (src), gst_event_new_tag (tags));
-    src->priv->prev_track = src->priv->cur_track;
-
-    gst_audio_cd_src_update_duration (src);
-
-    g_object_notify (G_OBJECT (src), "track");
-  }
-
   GST_LOG_OBJECT (src, "asking for sector %u", src->priv->cur_sector);
 
   buf = klass->read_sector (src, src->priv->cur_sector);
@@ -1772,6 +1808,42 @@ gst_audio_cd_src_create (GstPushSrc * pushsrc, GstBuffer ** buffer)
   if (buf == NULL) {
     GST_WARNING_OBJECT (src, "failed to read sector %u", src->priv->cur_sector);
     return GST_FLOW_ERROR;
+  }
+
+  if (src->priv->prev_track != src->priv->cur_track) {
+    GstTagList *tags;
+    GstCaps *caps;
+    GstTypeFindProbability prob;
+
+    tags =
+        gst_tag_list_merge (src->tags,
+        src->priv->tracks[src->priv->cur_track].tags, GST_TAG_MERGE_REPLACE);
+
+    caps = gst_type_find_helper_for_buffer (GST_OBJECT (src), buf, &prob);
+    if (caps != NULL) {
+      GST_DEBUG_OBJECT (src, "typefind caps = %" GST_PTR_FORMAT ", P=%d",
+          caps, prob);
+      if (!caps_are_dts (caps, prob)) {
+        gst_caps_unref (caps);
+        caps = NULL;
+      } else {
+        gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE,
+            GST_TAG_AUDIO_CODEC, "DTS", NULL);
+      }
+    }
+
+    if (caps == NULL)
+      caps = gst_caps_from_string (RAW_CAPS);
+
+    gst_base_src_set_caps (GST_BASE_SRC (src), caps);
+
+    GST_LOG_OBJECT (src, "announcing tags: %" GST_PTR_FORMAT, tags);
+    gst_pad_push_event (GST_BASE_SRC_PAD (src), gst_event_new_tag (tags));
+    src->priv->prev_track = src->priv->cur_track;
+
+    gst_audio_cd_src_update_duration (src);
+
+    g_object_notify (G_OBJECT (src), "track");
   }
 
   if (gst_pad_query_position (GST_BASE_SRC_PAD (src), GST_FORMAT_TIME,
