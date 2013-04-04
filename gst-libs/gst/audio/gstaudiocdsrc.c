@@ -1853,6 +1853,7 @@ gst_audio_cd_src_create (GstPushSrc * pushsrc, GstBuffer ** buffer)
         gst_caps_unref (caps);
         caps = NULL;
       } else {
+        gst_caps_set_simple (caps, "is-cdda", G_TYPE_BOOLEAN, TRUE, NULL);
         gst_tag_list_add (tags, GST_TAG_MERGE_REPLACE,
             GST_TAG_AUDIO_CODEC, "DTS", NULL);
       }
