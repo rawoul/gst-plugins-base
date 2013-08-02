@@ -141,6 +141,8 @@ static const FormatInfo formats[] = {
   {"audio/x-dpcm", "DPCM", FLAG_AUDIO, ""},
   {"audio/x-dts", "DTS", FLAG_AUDIO, "dts"},
   {"audio/x-private1-dts", "DTS", FLAG_AUDIO, "dts"},
+  {"audio/x-dts-hd", "DTS HD", FLAG_AUDIO, "dts"},
+  {"audio/x-dts-hd-ma", "DTS HD Master Audio", FLAG_AUDIO, "dts"},
   {"audio/x-dv", "DV Audio", FLAG_AUDIO, ""},
   {"audio/x-eac3", "Dolby Digital Plus", FLAG_AUDIO, "eac3"},
   {"audio/x-flac", N_("Free Lossless Audio Codec (FLAC)"), FLAG_AUDIO, "flac"},
