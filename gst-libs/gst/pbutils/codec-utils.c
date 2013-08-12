@@ -37,6 +37,8 @@
 #include "config.h"
 #endif
 
+#include <gst/base/gstbitreader.h>
+
 #include "pbutils.h"
 
 #include <string.h>
@@ -127,14 +129,20 @@ gst_codec_utils_aac_get_index_from_sample_rate (guint rate)
 const gchar *
 gst_codec_utils_aac_get_profile (const guint8 * audio_config, guint len)
 {
-  guint profile;
-
-  if (len < 1)
-    return NULL;
+  GstBitReader br = GST_BIT_READER_INIT (audio_config, len);
+  guint32 profile;
 
   GST_MEMDUMP ("audio config", audio_config, len);
 
-  profile = audio_config[0] >> 3;
+  if (!gst_bit_reader_get_bits_uint32 (&br, &profile, 5))
+    goto invalid_config;
+
+  if (profile == 31) {
+    if (!gst_bit_reader_get_bits_uint32 (&br, &profile, 6))
+      goto invalid_config;
+    profile += 32;
+  }
+
   switch (profile) {
     case 1:
       return "main";
@@ -144,11 +152,17 @@ gst_codec_utils_aac_get_profile (const guint8 * audio_config, guint len)
       return "ssr";
     case 4:
       return "ltp";
+    case 39:
+      return "eld";
     default:
       break;
   }
 
   GST_DEBUG ("Invalid profile idx: %u", profile);
+  return NULL;
+
+invalid_config:
+  GST_WARNING ("invalid audio config");
   return NULL;
 }
 
@@ -189,7 +203,8 @@ gst_codec_utils_aac_get_profile (const guint8 * audio_config, guint len)
 const gchar *
 gst_codec_utils_aac_get_level (const guint8 * audio_config, guint len)
 {
-  int profile, sr_idx, channel_config, rate;
+  GstBitReader br;
+  guint32 profile, sr_idx, channel_config, rate;
   /* Number of single channel elements, channel pair elements, low frequency
    * elements, independently switched coupling channel elements, and
    * dependently switched coupling channel elements.
@@ -206,19 +221,33 @@ gst_codec_utils_aac_get_level (const guint8 * audio_config, guint len)
 
   g_return_val_if_fail (audio_config != NULL, NULL);
 
-  if (len < 2)
-    return NULL;
-
   GST_MEMDUMP ("audio config", audio_config, len);
+  gst_bit_reader_init (&br, audio_config, len);
 
-  profile = audio_config[0] >> 3;
-  /* FIXME: add support for sr_idx = 0xf */
-  sr_idx = ((audio_config[0] & 0x7) << 1) | ((audio_config[1] & 0x80) >> 7);
-  rate = gst_codec_utils_aac_get_sample_rate_from_index (sr_idx);
-  channel_config = (audio_config[1] & 0x7f) >> 3;
+  if (!gst_bit_reader_get_bits_uint32 (&br, &profile, 5))
+    goto invalid_config;
+
+  if (profile == 31) {
+    if (!gst_bit_reader_get_bits_uint32 (&br, &profile, 6))
+      goto invalid_config;
+    profile += 32;
+  }
+
+  if (!gst_bit_reader_get_bits_uint32 (&br, &sr_idx, 4))
+    goto invalid_config;
+
+  if (sr_idx == 0xf) {
+    if (!gst_bit_reader_get_bits_uint32 (&br, &rate, 24))
+      goto invalid_config;
+  } else {
+    rate = gst_codec_utils_aac_get_sample_rate_from_index (sr_idx);
+  }
+
+  if (!gst_bit_reader_get_bits_uint32 (&br, &channel_config, 4))
+    goto invalid_config;
 
   if (rate == 0)
-    return NULL;
+    goto invalid_config;
 
   switch (channel_config) {
     case 0:
@@ -351,6 +380,10 @@ gst_codec_utils_aac_get_level (const guint8 * audio_config, guint len)
   } else {
     return digit_to_string (ret);
   }
+
+invalid_config:
+  GST_WARNING ("invalid audio config");
+  return NULL;
 }
 
 /**
