@@ -467,6 +467,8 @@ gst_tag_demux_trim_buffer (GstTagDemux * tagdemux, GstBuffer ** buf_ref,
           gst_buffer_copy_region (buf, GST_BUFFER_COPY_ALL, trim_start,
           out_size);
       g_return_val_if_fail (sub != NULL, FALSE);
+      GST_BUFFER_PTS (sub) = GST_BUFFER_PTS (buf);
+      GST_BUFFER_DTS (sub) = GST_BUFFER_DTS (buf);
       gst_buffer_unref (buf);
       *buf_ref = buf = sub;
       *buf_size = out_size;
