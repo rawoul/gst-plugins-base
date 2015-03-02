@@ -1120,6 +1120,15 @@ avgub d, t1, t2
 avgub d, s1, s2
 
 
+.function video_convert_orc_merge_uv
+.flags 2d
+.dest 2 d guint8
+.source 1 s1 guint8
+.source 1 s2 guint8
+
+mergebw d, s1, s2
+
+
 .function video_orc_convert_YUY2_AYUV
 .flags 2d
 .dest 8 ayuv guint8

@@ -2888,6 +2888,23 @@ convert_I420_YUY2 (GstVideoConverter * convert, const GstVideoFrame * src,
 }
 
 static void
+convert_I420_NV12 (GstVideoConverter * convert, const GstVideoFrame * src,
+    GstVideoFrame * dest)
+{
+  int i;
+  gint width = convert->in_width;
+  gint height = convert->in_height;
+
+  for (i = 0; i < height; i++)
+    memcpy (FRAME_GET_Y_LINE (dest, i), FRAME_GET_Y_LINE (src, i), width);
+
+  video_convert_orc_merge_uv (FRAME_GET_U_LINE (dest, 0),
+      FRAME_GET_U_STRIDE (dest), FRAME_GET_U_LINE (src, 0),
+      FRAME_GET_U_STRIDE (src), FRAME_GET_V_LINE (src, 0),
+      FRAME_GET_V_STRIDE (src), (width + 1) / 2, (height + 1) / 2);
+}
+
+static void
 convert_I420_UYVY (GstVideoConverter * convert, const GstVideoFrame * src,
     GstVideoFrame * dest)
 {
@@ -4529,6 +4546,10 @@ static const VideoTransform transforms[] = {
       TRUE, FALSE, FALSE, FALSE, 0, 0, convert_scale_planes},
   {GST_VIDEO_FORMAT_YVU9, GST_VIDEO_FORMAT_YVU9, FALSE, FALSE, FALSE, TRUE,
       TRUE, FALSE, FALSE, FALSE, 0, 0, convert_scale_planes},
+
+  /* planar -> semiplanar */
+  {GST_VIDEO_FORMAT_I420, GST_VIDEO_FORMAT_NV12, TRUE, FALSE, TRUE, FALSE,
+      FALSE, FALSE, FALSE, FALSE, 0, 0, convert_I420_NV12},
 
   /* sempiplanar -> semiplanar */
   {GST_VIDEO_FORMAT_NV12, GST_VIDEO_FORMAT_NV12, TRUE, FALSE, FALSE, TRUE,
