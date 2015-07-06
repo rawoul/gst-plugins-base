@@ -2200,7 +2200,7 @@ is_live_source (GstElement * source)
 static gboolean
 setup_source (GstURIDecodeBin * decoder)
 {
-  gboolean is_raw, have_out, is_dynamic;
+  gboolean is_raw, have_out, is_dynamic, is_live;
 
   GST_DEBUG_OBJECT (decoder, "setup source");
 
@@ -2223,7 +2223,8 @@ setup_source (GstURIDecodeBin * decoder)
   g_signal_emit (decoder, gst_uri_decode_bin_signals[SIGNAL_SOURCE_SETUP],
       0, decoder->source);
 
-  if (is_live_source (decoder->source))
+  is_live = is_live_source (decoder->source);
+  if (is_live)
     decoder->is_stream = FALSE;
 
   /* remove the old decoders now, if any */
@@ -2261,12 +2262,14 @@ setup_source (GstURIDecodeBin * decoder)
     decoder->src_np_sig_id =
         g_signal_connect (decoder->source, "pad-added",
         G_CALLBACK (source_new_pad), decoder);
-    decoder->src_nmp_sig_id =
-        g_signal_connect (decoder->source, "no-more-pads",
-        G_CALLBACK (source_no_more_pads), decoder);
-    g_object_set_data (G_OBJECT (decoder->source), "pending",
-        GINT_TO_POINTER (1));
-    decoder->pending++;
+    if (!is_live) {
+      decoder->src_nmp_sig_id =
+          g_signal_connect (decoder->source, "no-more-pads",
+          G_CALLBACK (source_no_more_pads), decoder);
+      g_object_set_data (G_OBJECT (decoder->source), "pending",
+          GINT_TO_POINTER (1));
+      decoder->pending++;
+    }
   } else {
     if (decoder->is_stream) {
       GST_DEBUG_OBJECT (decoder, "Setting up streaming");
