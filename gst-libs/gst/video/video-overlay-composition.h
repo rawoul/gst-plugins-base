@@ -157,6 +157,18 @@ gboolean                     gst_video_overlay_rectangle_get_render_rectangle   
                                                                                    guint                     * render_width,
                                                                                    guint                     * render_height);
 
+void                         gst_video_overlay_rectangle_set_render_geometry      (GstVideoOverlayRectangle  * rectangle,
+                                                                                   gdouble                     render_x,
+                                                                                   gdouble                     render_y,
+                                                                                   gdouble                     render_width,
+                                                                                   gdouble                     render_height);
+
+gboolean                     gst_video_overlay_rectangle_get_render_geometry      (GstVideoOverlayRectangle  * rectangle,
+                                                                                   gdouble                   * render_x,
+                                                                                   gdouble                   * render_y,
+                                                                                   gdouble                   * render_width,
+                                                                                   gdouble                   * render_height);
+
 GstBuffer *                  gst_video_overlay_rectangle_get_pixels_raw           (GstVideoOverlayRectangle  * rectangle,
                                                                                    GstVideoOverlayFormatFlags  flags);
 

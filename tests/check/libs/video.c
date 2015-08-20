@@ -1066,6 +1066,7 @@ GST_START_TEST (test_overlay_composition)
   guint seq1, seq2;
   guint w, h, stride;
   gint x, y;
+  gdouble fx, fy, fw, fh;
   guint8 val;
 
   pix1 = gst_buffer_new_and_alloc (200 * sizeof (guint32) * 50);
@@ -1095,7 +1096,21 @@ GST_START_TEST (test_overlay_composition)
 
   /* drop our ref, so refcount is 1 (we know it will continue to be valid) */
   gst_video_overlay_rectangle_unref (rect1);
-  gst_video_overlay_rectangle_set_render_rectangle (rect1, 50, 600, 300, 50);
+  gst_video_overlay_rectangle_set_render_geometry (rect1, -49.5, -600.4, 300.4,
+      49.5);
+
+  /* check render rectangle */
+  gst_video_overlay_rectangle_get_render_geometry (rect1, &fx, &fy, &fw, &fh);
+  fail_unless_equals_float (fx, -49.5);
+  fail_unless_equals_float (fy, -600.4);
+  fail_unless_equals_float (fw, 300.4);
+  fail_unless_equals_float (fh, 49.5);
+
+  gst_video_overlay_rectangle_get_render_rectangle (rect1, &x, &y, &w, &h);
+  fail_unless_equals_int (x, -50);
+  fail_unless_equals_int (y, -600);
+  fail_unless_equals_int (w, 300);
+  fail_unless_equals_int (h, 50);
 
   comp2 = gst_video_overlay_composition_new (rect1);
   fail_unless (gst_video_overlay_composition_n_rectangles (comp2) == 1);
@@ -1112,7 +1127,7 @@ GST_START_TEST (test_overlay_composition)
   /* this should make a copy of the rectangles so drop the original
    * second ref on rect1 */
   comp2 = gst_video_overlay_composition_make_writable (comp2);
-  gst_video_overlay_rectangle_set_render_rectangle (rect1, 51, 601, 301, 51);
+  gst_video_overlay_rectangle_set_render_rectangle (rect1, -51, -601, 301, 51);
 
   rect2 = gst_video_overlay_composition_get_rectangle (comp2, 0);
   fail_unless (gst_video_overlay_composition_n_rectangles (comp2) == 1);
@@ -1127,8 +1142,8 @@ GST_START_TEST (test_overlay_composition)
 
   /* make sure the copy really worked */
   gst_video_overlay_rectangle_get_render_rectangle (rect1, &x, &y, &w, &h);
-  fail_unless_equals_int (x, 51);
-  fail_unless_equals_int (y, 601);
+  fail_unless_equals_int (x, -51);
+  fail_unless_equals_int (y, -601);
   fail_unless_equals_int (w, 301);
   fail_unless_equals_int (h, 51);
 
@@ -1143,8 +1158,8 @@ GST_START_TEST (test_overlay_composition)
   fail_unless_equals_int (val, 0);
 
   gst_video_overlay_rectangle_get_render_rectangle (rect2, &x, &y, &w, &h);
-  fail_unless_equals_int (x, 50);
-  fail_unless_equals_int (y, 600);
+  fail_unless_equals_int (x, -50);
+  fail_unless_equals_int (y, -600);
   fail_unless_equals_int (w, 300);
   fail_unless_equals_int (h, 50);
 

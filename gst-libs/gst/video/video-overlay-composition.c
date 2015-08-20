@@ -69,6 +69,7 @@
 #include "video-blend.h"
 #include "gstvideometa.h"
 #include <string.h>
+#include <math.h>
 
 struct _GstVideoOverlayComposition
 {
@@ -94,8 +95,8 @@ struct _GstVideoOverlayRectangle
   /* Position on video frame and dimension of output rectangle in
    * output frame terms (already adjusted for the PAR of the output
    * frame). x/y can be negative (overlay will be clipped then) */
-  gint x, y;
-  guint render_width, render_height;
+  gdouble x, y;
+  gdouble render_width, render_height;
 
   /* Info on overlay pixels (format, width, height) */
   GstVideoInfo info;
@@ -148,6 +149,11 @@ struct _GstVideoOverlayRectangle
 
 #define GST_RECTANGLE_LOCK(rect)   g_mutex_lock(&rect->lock)
 #define GST_RECTANGLE_UNLOCK(rect) g_mutex_unlock(&rect->lock)
+
+static GstVideoOverlayRectangle *
+gst_video_overlay_rectangle_new_raw_internal (GstBuffer * pixels,
+    gdouble render_x, gdouble render_y, gdouble render_width,
+    gdouble render_height, GstVideoOverlayFormatFlags flags);
 
 /* --------------------------- utility functions --------------------------- */
 
@@ -433,8 +439,8 @@ gst_video_overlay_composition_get_rectangle (GstVideoOverlayComposition * comp,
 static gboolean
 gst_video_overlay_rectangle_needs_scaling (GstVideoOverlayRectangle * r)
 {
-  return (GST_VIDEO_INFO_WIDTH (&r->info) != r->render_width ||
-      GST_VIDEO_INFO_HEIGHT (&r->info) != r->render_height);
+  return (GST_VIDEO_INFO_WIDTH (&r->info) != round (r->render_width) ||
+      GST_VIDEO_INFO_HEIGHT (&r->info) != round (r->render_height));
 }
 
 /**
@@ -487,7 +493,8 @@ gst_video_overlay_composition_blend (GstVideoOverlayComposition * comp,
     needs_scaling = gst_video_overlay_rectangle_needs_scaling (rect);
     if (needs_scaling) {
       gst_video_blend_scale_linear_RGBA (&rect->info, rect->pixels,
-          rect->render_height, rect->render_width, &scaled_info, &pixels);
+          round (rect->render_height), round (rect->render_width),
+          &scaled_info, &pixels);
       vinfo = &scaled_info;
     } else {
       pixels = gst_buffer_ref (rect->pixels);
@@ -496,8 +503,8 @@ gst_video_overlay_composition_blend (GstVideoOverlayComposition * comp,
 
     gst_video_frame_map (&rectangle_frame, vinfo, pixels, GST_MAP_READ);
 
-    ret = gst_video_blend (video_buf, &rectangle_frame, rect->x, rect->y,
-        rect->global_alpha);
+    ret = gst_video_blend (video_buf, &rectangle_frame,
+        round (rect->x), round (rect->y), rect->global_alpha);
     gst_video_frame_unmap (&rectangle_frame);
     if (!ret) {
       GST_WARNING ("Could not blend overlay rectangle onto video buffer");
@@ -680,6 +687,15 @@ gst_video_overlay_rectangle_new_raw (GstBuffer * pixels,
     gint render_x, gint render_y, guint render_width, guint render_height,
     GstVideoOverlayFormatFlags flags)
 {
+  return gst_video_overlay_rectangle_new_raw_internal (pixels, render_x,
+      render_y, render_width, render_height, flags);
+}
+
+static GstVideoOverlayRectangle *
+gst_video_overlay_rectangle_new_raw_internal (GstBuffer * pixels,
+    gdouble render_x, gdouble render_y, gdouble render_width,
+    gdouble render_height, GstVideoOverlayFormatFlags flags)
+{
   GstVideoOverlayRectangle *rect;
   GstVideoMeta *vmeta;
   GstVideoFormat format;
@@ -736,16 +752,85 @@ gst_video_overlay_rectangle_new_raw (GstBuffer * pixels,
 
   rect->seq_num = gst_video_overlay_get_seqnum ();
 
-  GST_LOG ("new rectangle %p: %ux%u => %ux%u @ %u,%u, seq_num %u, format %u, "
-      "flags %x, pixels %p, global_alpha=%f", rect, width, height, render_width,
-      render_height, render_x, render_y, rect->seq_num, format,
+  GST_LOG ("new rectangle %p: %ux%u => %.3lfx%.3lf @ %.3lf,%.3lf, seq_num %u, "
+      "format %u, flags %x, pixels %p, global_alpha=%f", rect, width, height,
+      render_width, render_height, render_x, render_y, rect->seq_num, format,
       rect->flags, pixels, rect->global_alpha);
 
   return rect;
 }
 
+
 /**
  * gst_video_overlay_rectangle_get_render_rectangle:
+ * @rectangle: a #GstVideoOverlayRectangle
+ * @render_x: (out) (allow-none): address where to store the X render offset
+ * @render_y: (out) (allow-none): address where to store the Y render offset
+ * @render_width: (out) (allow-none): address where to store the render width
+ * @render_height: (out) (allow-none): address where to store the render height
+ *
+ * Retrieves the render position and render dimension of the overlay
+ * rectangle on the video. The returned rectangle coordinates are aligned to
+ * the nearest pixel, as it is stored as floating point values internally.
+ *
+ * Returns: TRUE if valid render dimensions were retrieved.
+ */
+gboolean
+gst_video_overlay_rectangle_get_render_rectangle (GstVideoOverlayRectangle *
+    rectangle, gint * render_x, gint * render_y, guint * render_width,
+    guint * render_height)
+{
+  g_return_val_if_fail (GST_IS_VIDEO_OVERLAY_RECTANGLE (rectangle), FALSE);
+
+  if (render_x)
+    *render_x = round (rectangle->x);
+  if (render_y)
+    *render_y = round (rectangle->y);
+  if (render_width)
+    *render_width = round (rectangle->render_width);
+  if (render_height)
+    *render_height = round (rectangle->render_height);
+
+  return TRUE;
+}
+
+/**
+ * gst_video_overlay_rectangle_set_render_rectangle:
+ * @rectangle: a #GstVideoOverlayRectangle
+ * @render_x: render X position of rectangle on video
+ * @render_y: render Y position of rectangle on video
+ * @render_width: render width of rectangle
+ * @render_height: render height of rectangle
+ *
+ * Sets the render position and dimensions of the rectangle on the video.
+ * This function is mainly for elements that modify the size of the video
+ * in some way (e.g. through scaling or cropping) and need to adjust the
+ * details of any overlays to match the operation that changed the size.
+ * It might be preferable to use the
+ * gst_video_overlay_rectangle_set_render_geometry function instead, as it
+ * allows passing floating point coordinates.
+ *
+ * @rectangle must be writable, meaning its refcount must be 1. You can
+ * make the rectangles inside a #GstVideoOverlayComposition writable using
+ * gst_video_overlay_composition_make_writable() or
+ * gst_video_overlay_composition_copy().
+ */
+void
+gst_video_overlay_rectangle_set_render_rectangle (GstVideoOverlayRectangle *
+    rectangle, gint render_x, gint render_y, guint render_width,
+    guint render_height)
+{
+  g_return_if_fail (GST_IS_VIDEO_OVERLAY_RECTANGLE (rectangle));
+  g_return_if_fail (GST_MINI_OBJECT_REFCOUNT_VALUE (rectangle) == 1);
+
+  rectangle->x = render_x;
+  rectangle->y = render_y;
+  rectangle->render_width = render_width;
+  rectangle->render_height = render_height;
+}
+
+/**
+ * gst_video_overlay_rectangle_get_render_geometry:
  * @rectangle: a #GstVideoOverlayRectangle
  * @render_x: (out) (allow-none): address where to store the X render offset
  * @render_y: (out) (allow-none): address where to store the Y render offset
@@ -758,9 +843,9 @@ gst_video_overlay_rectangle_new_raw (GstBuffer * pixels,
  * Returns: TRUE if valid render dimensions were retrieved.
  */
 gboolean
-gst_video_overlay_rectangle_get_render_rectangle (GstVideoOverlayRectangle *
-    rectangle, gint * render_x, gint * render_y, guint * render_width,
-    guint * render_height)
+gst_video_overlay_rectangle_get_render_geometry (GstVideoOverlayRectangle *
+    rectangle, gdouble * render_x, gdouble * render_y, gdouble * render_width,
+    gdouble * render_height)
 {
   g_return_val_if_fail (GST_IS_VIDEO_OVERLAY_RECTANGLE (rectangle), FALSE);
 
@@ -777,7 +862,7 @@ gst_video_overlay_rectangle_get_render_rectangle (GstVideoOverlayRectangle *
 }
 
 /**
- * gst_video_overlay_rectangle_set_render_rectangle:
+ * gst_video_overlay_rectangle_set_render_geometry:
  * @rectangle: a #GstVideoOverlayRectangle
  * @render_x: render X position of rectangle on video
  * @render_y: render Y position of rectangle on video
@@ -795,9 +880,9 @@ gst_video_overlay_rectangle_get_render_rectangle (GstVideoOverlayRectangle *
  * gst_video_overlay_composition_copy().
  */
 void
-gst_video_overlay_rectangle_set_render_rectangle (GstVideoOverlayRectangle *
-    rectangle, gint render_x, gint render_y, guint render_width,
-    guint render_height)
+gst_video_overlay_rectangle_set_render_geometry (GstVideoOverlayRectangle *
+    rectangle, gdouble render_x, gdouble render_y, gdouble render_width,
+    gdouble render_height)
 {
   g_return_if_fail (GST_IS_VIDEO_OVERLAY_RECTANGLE (rectangle));
   g_return_if_fail (GST_MINI_OBJECT_REFCOUNT_VALUE (rectangle) == 1);
@@ -1140,8 +1225,8 @@ gst_video_overlay_rectangle_get_pixels_raw_internal (GstVideoOverlayRectangle *
 
   width = GST_VIDEO_INFO_WIDTH (&rectangle->info);
   height = GST_VIDEO_INFO_HEIGHT (&rectangle->info);
-  wanted_width = unscaled ? width : rectangle->render_width;
-  wanted_height = unscaled ? height : rectangle->render_height;
+  wanted_width = unscaled ? width : round (rectangle->render_width);
+  wanted_height = unscaled ? height : round (rectangle->render_height);
   format = GST_VIDEO_INFO_FORMAT (&rectangle->info);
 
   apply_global_alpha =
@@ -1544,9 +1629,9 @@ gst_video_overlay_rectangle_copy (GstVideoOverlayRectangle * rectangle)
 
   g_return_val_if_fail (GST_IS_VIDEO_OVERLAY_RECTANGLE (rectangle), NULL);
 
-  copy = gst_video_overlay_rectangle_new_raw (rectangle->pixels,
-      rectangle->x, rectangle->y,
-      rectangle->render_width, rectangle->render_height, rectangle->flags);
+  copy = gst_video_overlay_rectangle_new_raw_internal (rectangle->pixels,
+      rectangle->x, rectangle->y, rectangle->render_width,
+      rectangle->render_height, rectangle->flags);
   if (rectangle->global_alpha != 1)
     gst_video_overlay_rectangle_set_global_alpha (copy,
         rectangle->global_alpha);
